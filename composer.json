@@ -1,0 +1,15 @@
+{
+    "name": "usuario/louding-ads",
+    "autoload": {
+        "psr-4": {
+            "Usuario\\LoudingAds\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "raykotab",
+            "email": "raykotab@gmail.com"
+        }
+    ],
+    "require": {}
+}
