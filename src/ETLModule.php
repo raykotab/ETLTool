@@ -15,12 +15,12 @@ class ETLModule
     private $source3;
     /** @var PDO $target1 */
     private $target1;
-    /** @var PDO $target1 */
+    /** @var PDO $target2 */
     private $target2;
-    /** @var PDO $target1 */
+    /** @var PDO $target3 */
     private $target3;
 
-    public function setUp(): void
+    public function setConnections(): void
     {
         $this->source1 = new PDO('mysql:host=localhost;dbname=car', 'root', '');
         $this->source2 = new PDO('mysql:host=localhost;dbname=house', 'root', '');
@@ -31,7 +31,12 @@ class ETLModule
         $this->target3 = new PDO('mysql:host=localhost;dbname=la_job', 'root', '');
     }
 
-    public function testETL(): void
+    /**
+     * Function that makes the three steps of ETL with all three databases
+     * 
+     * @return void 
+     */
+    public function extractTransformLoad(): void
     {
         // Extract data from source databases
         $data1 = $this->source1->query('SELECT * FROM car')->fetchAll(PDO::FETCH_ASSOC);
@@ -39,67 +44,64 @@ class ETLModule
         $data3 = $this->source3->query('SELECT * FROM job')->fetchAll(PDO::FETCH_ASSOC);
 
         // Transform data
-        $transformedDataCar = [];
-        foreach ($data1 as $row) {
-            $transformedDataCar[] = [
-                'firstname' => \ucfirst($row['firstname']),
-                'lastname' => \ucfirst($row['lastname']),
-                'zipcode' => \preg_replace('/[\s"]+/', '', $row['zipcode']),
-                'dateofbirth' => $this->parseDate($row['dateofbirth']),
-                'gender' => $this->unificateGender($row['gender']),
-                'registrationdate' => $this->parseDateTime($row['registrationdate']),
-                'source' => 'car'
-            ];
-        }
+        $transformedData1 = $this->transformData($data1, "car");
+        $transformedData2 = $this->transformData($data2, "house");
+        $transformedData3 = $this->transformData($data3, "job");
 
-        foreach ($data2 as $row) {
-            $transformedData[] = [
-                'firstname' => \ucfirst($row['firstname']),
-                'lastname' => \ucfirst($row['lastname']),
-                'zipcode' => \preg_replace('/[\s"]+/', '', $row['zipcode']),
-                'dateofbirth' => $this->parseDate($row['dateofbirth']),
-                'gender' => $this->unificateGender($row['gender']),
-                'registrationdate' => $this->parseDateTime($row['registrationdate']),
-                'source' => 'house'
-            ];
-        }
-        foreach ($data3 as $row) {
-            $transformedData[] = [
-                'firstname' => \ucfirst($row['firstname']),
-                'lastname' => \ucfirst($row['lastname']),
-                'zipcode' => \preg_replace('/[\s"]+/', '', $row['zipcode']),
-                'dateofbirth' => $this->parseDate($row['dateofbirth']),
-                'gender' => $this->unificateGender($row['gender']),
-                'registrationdate' => $this->parseDateTime($row['registrationdate']),
-                'source' => 'job'
-            ];
-        }
-        // Load data into target database
-        foreach ($transformedData as $row) {
-            $stmt = $this->target1->prepare('INSERT INTO test_result (firstname, lastname, zipcode, dateofbirth, gender, registrationdate, source) VALUES (:firstname, :lastname, :zipcode, :dateofbirth, :gender, :registrationdate, :source)');
-            $stmt->execute($row);
-        }
+        //load Data
+        $this->loadData($transformedData1, $this->target1, "la_car");
+        $this->loadData($transformedData2, $this->target2, "la_house");
+        $this->loadData($transformedData3, $this->target3, "la_job");
     }
 
-    public function tearDown(): void
+    /**
+     * Ends the connections to the databases
+     * 
+     * @return void
+     */
+    public function closeConnections(): void
     {
-        // Delete the created rows
-        // $stmt = $this->target1->prepare("DELETE FROM test_result WHERE firstname = 'TestValue'");
-        // $stmt->execute();
-        $stmt1 =  $this->source1->prepare("DELETE FROM test_car WHERE firstname = 'TestValue'");
-        $stmt1->execute();
-        $stmt2 =  $this->source2->prepare("DELETE FROM test_house WHERE firstname = 'TestValue'");
-        $stmt2->execute();
-        $stmt3 =  $this->source3->prepare("DELETE FROM test_job WHERE firstname = 'TestValue'");
-        $stmt3->execute();
-
-        // Close the database connection
         $this->target1 = null;
+        $this->target2 = null;
+        $this->target3 = null;
         $this->source1 = null;
         $this->source2 = null;
         $this->source3 = null;
     }
 
+    /**
+     * Function for transforming the data into determined formats
+     * 
+     * @param array $data with different formats
+     * @param array $source table name
+     * @return array $data with unified formats
+     */
+    private function transformData(array $data, string $source): array
+    {
+        /** @var array $transformedData */
+        $transformedData = [];
+
+        foreach ($data as $row) {
+            $transformedData[] = [
+                'firstname' => \ucfirst($row['firstname']),
+                'lastname' => \ucwords(preg_replace('/"/', '', $row['lastname'])),
+                'zipcode' => \preg_replace('/[\s"]+/', '', $row['zipcode']),
+                'dateofbirth' => $this->parseDate($row['dateofbirth']),
+                'gender' => $this->unificateGender($row['gender']),
+                'registrationdate' => $this->parseDateTime($row['registrationdate']),
+                'source' => $source
+            ];
+        }
+
+        return $transformedData;
+    }
+
+    /**
+     * Function for taking different gender formats and returning only M or F
+     * 
+     * @param string $gender
+     * @return string Capìtal letter  
+     */
     private function unificateGender(string $gender): string
     {
         if ($gender === 'm' || $gender === 'mr' || $gender === 'male') {
@@ -120,11 +122,12 @@ class ETLModule
      */
     private function parseDate(string $dateString): string
     {
+        $cleanDateString = preg_replace('/"/', '', $dateString);
+        /** @var Date|null $dateTiemObject */
         $dateObject = null;
-
         $formats = array('d/m/y', 'd/m/Y', 'F d Y');
         foreach ($formats as $format) {
-            $dateObject = DateTime::createFromFormat($format, $dateString);
+            $dateObject = DateTime::createFromFormat($format, $cleanDateString);
             if ($dateObject !== false) {
                 break;
             }
@@ -140,15 +143,17 @@ class ETLModule
      * @param string $dateTimeString The date-time string to parse.
      * @return string|null The date and time in the format Y-m-d H:i:s, or null if the input could not be parsed.
      */
-    function parseDateTime(string $dateTimeString): ?string
+    private function parseDateTime(string $dateTimeString): ?string
     {
+        $cleanDateTimeString =  preg_replace('/"/', '', $dateTimeString);
+        /** @var DateTime|null $dateTiemObject */
         $dateTimeObject = null;
         $dateFormats = array('d/m/y', 'd/m/Y', 'F d Y');
         $timeFormats = array('H:i:s', 'H:i', 'g:i A');
         foreach ($dateFormats as $dateFormat) {
             foreach ($timeFormats as $timeFormat) {
                 $format = $dateFormat . ' ' . $timeFormat;
-                $dateTimeObject = DateTime::createFromFormat($format, $dateTimeString);
+                $dateTimeObject = DateTime::createFromFormat($format, $cleanDateTimeString);
                 if ($dateTimeObject !== false) {
                     break 2;
                 }
@@ -157,4 +162,28 @@ class ETLModule
 
         return isset($dateTimeObject) ? $dateTimeObject->format('Y-m-d H:i:s') : null;
     }
+
+    /**
+     * Function that loads the data into the new databases.
+     * 
+     * @param array $transformedData formatted.
+     * @param PDO $target connection to load into.
+     * @param string $tableName.
+     * @return void
+     */
+    private function loadData(array $transformedData, PDO $target, string $tableName): void
+    {
+        foreach ($transformedData as $row) {
+            $stmt = $target->prepare(
+                "INSERT INTO $tableName (firstname, lastname, zipcode, dateofbirth, gender, registrationdate, source)
+                VALUES (:firstname, :lastname, :zipcode, :dateofbirth, :gender, :registrationdate, :source)"
+            );
+            $stmt->execute($row);
+        }
+    }
 }
+
+$etlModule = new ETLModule();
+$etlModule->setConnections();
+$etlModule->extractTransformLoad();
+$etlModule->closeConnections();
