@@ -108,7 +108,7 @@ class ETLTest extends TestCase
         $stmt2->execute();
         $stmt3 =  $this->source3->prepare("DELETE FROM test_job WHERE firstname = 'TestValue'");
         $stmt3->execute();
-        var_dump($this->target1);
+
         // Close the database connection
         $this->target1 = null;
         $this->source1 = null;
